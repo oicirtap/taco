@@ -278,6 +278,7 @@ void IRPrinter::visit(const Store* op) {
 void IRPrinter::visit(const For* op) {
   doIndent();
   stream << "// Test\n";
+  doIndent();
   stream << keywordString("for") << " (" 
          << keywordString(util::toString(op->var.type())) << " ";
   op->var.accept(this);
