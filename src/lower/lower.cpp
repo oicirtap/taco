@@ -511,6 +511,7 @@ Stmt lower(TensorVar tensorVar, string functionName, set<Property> properties,
            int allocSize) {
   const bool emitAssemble = util::contains(properties, Assemble);
   const bool emitCompute = util::contains(properties, Compute);
+  cout << "l1" << endl;
   if (tensorVar.isAccumulating()) {
     properties.insert(Accumulate);
   }

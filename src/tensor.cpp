@@ -6,6 +6,8 @@
 #include <sstream>
 #include <limits.h>
 
+#include <cuda_runtime.h>
+
 #include "taco/tensor.h"
 #include "taco/format.h"
 #include "taco/expr/expr.h"
@@ -408,6 +410,9 @@ static taco_tensor_t* packTensorData(const TensorBase& tensor) {
   tensorData->mode_types    = (taco_mode_t*)malloc(order * sizeof(taco_mode_t));
   tensorData->indices       = (uint8_t***)malloc(order * sizeof(uint8_t***));
 
+  int32_t* dimensions;
+  cuMemAlloc(&dimensions, (order * sizeof(int32_t)));
+
   auto index = storage.getIndex();
   for (size_t i = 0; i < tensor.getOrder(); i++) {
     auto modeType  = format.getModeTypes()[i];
@@ -544,13 +549,19 @@ void TensorBase::assemble() {
   taco_uassert(this->content->assembleFunc.defined())
       << error::assemble_without_compile;
 
+  cout << "a1" << endl;
+
   auto arguments = packArguments(*this);
+  cout << "a2" << endl;
   content->module->callFuncPacked("assemble", arguments.data());
+  cout << "a3" << endl;
 
   if (!content->assembleWhileCompute) {
     taco_tensor_t* tensorData = ((taco_tensor_t*)arguments[0]);
+    cout << "a4" << endl;
     content->valuesSize = unpackTensorData(*tensorData, *this);
   }
+  cout << "a5" << endl;
   for (auto& argument : arguments) freeTensorData((taco_tensor_t*)argument);
 }
 

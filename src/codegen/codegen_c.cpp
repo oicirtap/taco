@@ -190,7 +190,7 @@ string unpackTensorProperty(string varname, const GetProperty* op,
   if (op->property == TensorProperty::Values) {
     // for the values, it's in the last slot
     ret << toCType(tensor->type, true);
-    ret << " restrict " << varname << " = (double*)(";
+    ret /*<< " restrict "*/ << varname << " = (double*)(";
     ret << tensor->name << "->vals);\n";
     return ret.str();
   }
@@ -213,7 +213,7 @@ string unpackTensorProperty(string varname, const GetProperty* op,
   } else {
     tp = "int*";
     auto nm = op->index;
-    ret << tp << " restrict " << varname << " = ";
+    ret << tp /*<< " restrict "*/ << varname << " = ";
     ret << "(int*)(" << tensor->name << "->indices[" << op->mode;
     ret << "][" << nm << "]);\n";
   }
@@ -431,7 +431,7 @@ void resetUniqueNameCounters() {
 string printFuncName(const Function *func) {
   stringstream ret;
   
-  ret << "int " << func->name << "(";
+  ret << "extern \"C\" int " << func->name << "(";
 
   string delimiter = "";
   for (size_t i=0; i<func->outputs.size(); i++) {
@@ -493,7 +493,99 @@ void CodeGen_C::compile(Stmt stmt, bool isFirst) {
   stmt.accept(this);
 }
 
+string code = 
+  "__global__\n"
+  "void kernel(taco_tensor_t *a, taco_tensor_t *b, taco_tensor_t *c, int d) {\n"
+  "  double*a_vals = (double*)(a->vals);\n"
+  "  double*b_vals = (double*)(b->vals);\n"
+  "  double*c_vals = (double*)(c->vals);\n"
+  "  int32_t ib = blockIdx.x*blockDim.x + threadIdx.x;\n"
+  "  if (ib < d) a_vals[ib] = b_vals[ib] + c_vals[ib];\n"
+  "  \n"
+  "}\n"
+  "\n"
+  "extern \"C\" int compute(taco_tensor_t *a, taco_tensor_t *b, taco_tensor_t *c) {\n"
+  "  int a1_dimension = *(int*)(a->indices[0][0]);"
+  "  int b1_dimension = *(int*)(b->indices[0][0]);"
+  "  int c1_dimension = *(int*)(c->indices[0][0]);"
+  "  int d = *(int*)(a->indices[0][0]);"
+  "  \n"
+  "  taco_tensor_t *d_a;\n"
+  "  double *a_vals;\n"
+  "  cudaMalloc(&d_a, sizeof(taco_tensor_t));\n"
+  "  cudaMalloc(&a_vals, sizeof(double) * d);\n"
+  "  cudaMemcpy(a_vals, a->vals, sizeof(double) * d, cudaMemcpyHostToDevice);\n"
+  "  a->vals = (uint8_t*)a_vals;\n"
+  "  cudaMemcpy(d_a, a, sizeof(taco_tensor_t), cudaMemcpyHostToDevice);\n"
+  "  \n"
+  "  taco_tensor_t *d_b;\n"
+  "  double *b_vals;\n"
+  "  cudaMalloc(&d_b, sizeof(taco_tensor_t));\n"
+  "  cudaMalloc(&b_vals, sizeof(double) * d);\n"
+  "  cudaMemcpy(b_vals, b->vals, sizeof(double) * d, cudaMemcpyHostToDevice);\n"
+  "  b->vals = (uint8_t*)b_vals;\n"
+  "  cudaMemcpy(d_b, b, sizeof(taco_tensor_t), cudaMemcpyHostToDevice);\n"
+  "  \n"
+  "  taco_tensor_t *d_c;\n"
+  "  double *c_vals;\n"
+  "  cudaMalloc(&d_c, sizeof(taco_tensor_t));\n"
+  "  cudaMalloc(&c_vals, sizeof(double) * d);\n"
+  "  c->vals = (uint8_t*)a_vals;\n"
+  "  cudaMemcpy(d_c, c, sizeof(taco_tensor_t), cudaMemcpyHostToDevice);\n"
+  "  \n"
+  "  kernel<<<(d + 255), 256>>>(d_a, d_b, d_c, d);\n"
+  "  cudaDeviceSynchronize();\n"
+  "  \n"
+  "  cudaMemcpy(c->vals, c_vals, sizeof(double) * d, cudaMemcpyDeviceToHost);\n"
+  "  cudaFree(a_vals);\n"
+  "  cudaFree(d_a);\n"
+  "  cudaFree(b_vals);\n"
+  "  cudaFree(d_b);\n"
+  "  cudaFree(c_vals);\n"
+  "  cudaFree(d_c);\n"
+  "  \n"
+  "  return 0;\n"
+  "}\n";
+
+string code2 = 
+  "__global__\n"
+  "void kernel(taco_tensor_t *a, taco_tensor_t *b, taco_tensor_t *c, int d) {\n"
+  "  double*a_vals = (double*)(a->vals);\n"
+  "  double*b_vals = (double*)(b->vals);\n"
+  "  double*c_vals = (double*)(c->vals);\n"
+  "  \n"
+  "  for (int32_t ib = 0; ib < d; ib++) {\n"
+  "    a_vals[ib] = b_vals[ib] + c_vals[ib];\n"
+  "  }\n"
+  "}\n"
+  "\n"
+  "extern \"C\" int compute(taco_tensor_t *a, taco_tensor_t *b, taco_tensor_t *c) {\n"
+  "  int a1_dimension = *(int*)(a->indices[0][0]);\n"
+  "  double*a_vals = (double*)(a->vals);\n"
+  "  int b1_dimension = *(int*)(b->indices[0][0]);\n"
+  "  double*b_vals = (double*)(b->vals);\n"
+  "  int c1_dimension = *(int*)(c->indices[0][0]);\n"
+  "  double*c_vals = (double*)(c->vals);\n"
+
+  "  #pragma omp parallel for\n"
+  "  for (int32_t ib = 0; ib < b1_dimension; ib++) {\n"
+  "    a_vals[ib] = b_vals[ib] + c_vals[ib];\n"
+  "  }\n"
+
+  "  taco_tensor_t *d_a;\n"
+  "  cudaMalloc(&d_a, sizeof(taco_tensor_t));\n"
+  "  cudaMalloc(&a_vals, sizeof(double) * d);\n"
+  "  cudaMemcpy(d_a, a, sizeof(taco_tensor_t), cudaMemcpyHostToDevice);\n"
+  "  return 0;\n"
+  "}\n";
+
 void CodeGen_C::visit(const Function* func) {
+  if (func->name == "compute" && outputKind != C99Header && true) {
+    cout << "test" << endl;
+    out << code;
+    return;
+  }
+
   // if generating a header, protect the function declaration with a guard
   if (outputKind == C99Header) {
     out << "#ifndef TACO_GENERATED_" << func->name << "\n";
@@ -503,7 +595,7 @@ void CodeGen_C::visit(const Function* func) {
   // output function declaration
   doIndent();
   out << printFuncName(func);
-  
+
   // if we're just generating a header, this is all we need to do
   if (outputKind == C99Header) {
     out << ";\n";
@@ -525,13 +617,13 @@ void CodeGen_C::visit(const Function* func) {
   out << printDecls(varFinder.varDecls,
                     func->inputs, func->outputs);
 
+
   // output body
   out << endl;
   print(func->body);
   out << endl;
 
   out << "\n";
-  
   // output repack only if we allocated memory
   CheckForAlloc allocChecker;
   func->accept(&allocChecker);
@@ -668,7 +760,7 @@ void CodeGen_C::visit(const Sqrt* op) {
 void CodeGen_C::generateShim(const Stmt& func, stringstream &ret) {
   const Function *funcPtr = func.as<Function>();
   
-  ret << "int _shim_" << funcPtr->name << "(void** parameterPack) {\n";
+  ret << "extern \"C\" int _shim_" << funcPtr->name << "(void** parameterPack) {\n";
   ret << "  return " << funcPtr->name << "(";
   
   size_t i=0;

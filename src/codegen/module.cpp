@@ -54,7 +54,7 @@ void Module::compileToSource(string path, string prefix) {
   }
 
   ofstream source_file;
-  source_file.open(path+prefix+".c");
+  source_file.open(path+prefix+".cu");
   source_file << source.str();
   source_file.close();
   
@@ -78,7 +78,7 @@ void writeShims(vector<Stmt> funcs, string path, string prefix) {
   }
   
   ofstream shims_file;
-  shims_file.open(path+prefix+"_shims.c");
+  shims_file.open(path+prefix+"_shims.cu");
   shims_file << "#include \"" << path << prefix << ".h\"\n";
   shims_file << shims.str();
   shims_file.close();
@@ -92,11 +92,11 @@ string Module::compile() {
   
   string cc = util::getFromEnv("TACO_CC", "cc");
   string cflags = util::getFromEnv("TACO_CFLAGS",
-    "-O3 -ffast-math -std=c99") + " -shared -fPIC";
+				   "-O3") + " -shared --compiler-options=-fPIC";
   
-  string cmd = cc + " " + cflags + " " +
-    prefix + ".c " +
-    prefix + "_shims.c " +
+  string cmd = "nvcc " + cflags + " " +
+    prefix + ".cu " +
+    prefix + "_shims.cu " +
     "-o " + prefix + ".so";
 
   // open the output file & write out the source
@@ -130,12 +130,16 @@ void* Module::getFunc(std::string name) {
 }
 
 int Module::callFuncPackedRaw(std::string name, void** args) {
+  cout << "fpr1" << endl;
   typedef int (*fnptr_t)(void**);
   static_assert(sizeof(void*) == sizeof(fnptr_t),
     "Unable to cast dlsym() returned void pointer to function pointer");
+  cout << "fpr2" << endl;
   void* v_func_ptr = getFunc(name);
+  cout << name << endl;
   fnptr_t func_ptr;
   *reinterpret_cast<void**>(&func_ptr) = v_func_ptr;
+  cout << "fpr3" << endl;
   return func_ptr(args);
 }
 
