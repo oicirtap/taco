@@ -6,6 +6,8 @@
 #include <sstream>
 #include <limits.h>
 
+#include <cuda_runtime.h>
+
 #include "taco/tensor.h"
 #include "taco/format.h"
 #include "taco/expr/expr.h"
@@ -452,6 +454,11 @@ static taco_tensor_t* packTensorData(const TensorBase& tensor) {
   taco_iassert(tensor.getComponentType().getNumBits() <= INT_MAX);
   tensorData->csize = static_cast<int>(tensor.getComponentType().getNumBits());
   tensorData->vals  = (uint8_t*)storage.getValues().getData();
+
+  uint8_t *d_mem;
+  cudaMalloc(&d_mem, storage.getSizeInBytes());
+  cudaMemcpy(d_mem, tensorData->vals, storage.getSizeInBytes(), cudaMemcpyHostToDevice);
+  tensorData->d_vals = d_mem;
 
   return tensorData;
 }

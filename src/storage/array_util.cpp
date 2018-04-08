@@ -4,7 +4,7 @@ namespace taco {
 namespace storage {
 
 Array makeArray(DataType type, size_t size) {
-  return Array(type, malloc(size * type.getNumBytes()), size, Array::Free);
+  return Array(type, malloc(size * type.getNumBytes()), size, Array::Free, true);
 }
 
 }}

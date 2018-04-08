@@ -3,6 +3,8 @@
 #include <iostream>
 #include <string>
 
+#include <cuda_runtime.h>
+
 #include "taco/type.h"
 #include "taco/format.h"
 #include "taco/error.h"
@@ -21,6 +23,7 @@ struct Storage::Content {
   Format format;
   Index  index;
   Array  values;
+  Array  d_values;
 };
 
 Storage::Storage() : content(nullptr) {
@@ -32,7 +35,12 @@ Storage::Storage(const Format& format) : content(new Content) {
 
 void Storage::setValues(const Array& values) {
   content->values = values;
-} 
+  void * d_data;
+  int numBytes = values.getSize() * values.getType().getNumBytes();
+  cudaMalloc(&d_data, numBytes);
+  cudaMemcpy(d_data, values.getData(), numBytes, cudaMemcpyHostToDevice);
+  content->d_values = Array(values.getType(), d_data, values.getSize(), Array::Free, false);
+}
 
 const Format& Storage::getFormat() const {
   return content->format;
@@ -56,6 +64,14 @@ const Array& Storage::getValues() const {
 
 Array Storage::getValues() {
   return content->values;
+}
+
+const Array& Storage::getDValues() const {
+  return content->d_values;
+}
+
+Array Storage::getDValues() {
+  return content->d_values;
 }
 
 size_t Storage::getSizeInBytes() {

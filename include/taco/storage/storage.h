@@ -44,6 +44,12 @@ public:
   /// Returns the tensor component value array.
   Array getValues();
 
+  /// Returns the value array that contains the tensor components.
+  const Array& getDValues() const;
+
+  /// Returns the tensor component value array.
+  Array getDValues();
+
   /// Returns the size of the storage in bytes.
   size_t getSizeInBytes();
 

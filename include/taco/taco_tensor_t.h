@@ -14,7 +14,8 @@ typedef struct {
   int32_t*     mode_ordering; // mode storage ordering
   taco_mode_t* mode_types;    // mode storage types
   uint8_t***   indices;       // tensor index data (per mode)
-  uint8_t*     vals;          // tensor values
+  uint8_t*     vals;          // tensor values stored in host memory
+  uint8_t*     d_vals;        // tensor values stored in device memory
 } taco_tensor_t;
 
 #endif

@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 2.8.3 FATAL_ERROR)
+
+SET(CMAKE_CXX_COMPILER /usr/local/cuda-8.0/bin/nvcc)
+
 project(taco)
 
 SET(CMAKE_CONFIGURATION_TYPES "Release;Debug;MinSizeRel;RelWithDebInfo")
+
+find_package(CUDA  REQUIRED)
+include_directories("${CUDA_INCLUDE_DIRS}")
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Debug" CACHE STRING

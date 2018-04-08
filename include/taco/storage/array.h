@@ -21,7 +21,7 @@ public:
   Array();
 
   /// Construct an array of elements of the given type.
-  Array(DataType type, void* data, size_t size, Policy policy=Free);
+  Array(DataType type, void* data, size_t size, Policy policy=Free, bool host=true);
 
   /// Returns the type of the array elements
   const DataType& getType() const;

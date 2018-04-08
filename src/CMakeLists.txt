@@ -22,6 +22,8 @@ include_directories(${TACO_SRC_DIR})
 add_library(taco ${TACO_LIBRARY_TYPE} ${TACO_HEADERS} ${TACO_SOURCES})
 install(TARGETS taco DESTINATION lib)
 
+set(TACO_LIBRARIES ${CUDA_LIBRARIES})
+
 if (LINUX)
   target_link_libraries(taco PRIVATE ${TACO_LIBRARIES} dl)
 else()

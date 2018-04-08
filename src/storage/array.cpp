@@ -3,6 +3,8 @@
 #include <cstring>
 #include <iostream>
 
+#include <cuda_runtime.h>
+
 #include "taco/type.h"
 #include "taco/error.h"
 #include "taco/util/uncopyable.h"
@@ -18,6 +20,7 @@ struct Array::Content : util::Uncopyable {
   void*  data;
   size_t size;
   Policy policy = Array::UserOwns;
+  bool host;
 
   ~Content() {
     switch (policy) {
@@ -25,7 +28,11 @@ struct Array::Content : util::Uncopyable {
         // do nothing
         break;
       case Free:
-        free(data);
+	if (host){
+	  free(data);
+        } else {
+	  cudaFree(data);
+	}
         break;
       case Delete:
         switch (type.getKind()) {
@@ -86,11 +93,12 @@ struct Array::Content : util::Uncopyable {
 Array::Array() : content(new Content) {
 }
 
-Array::Array(DataType type, void* data, size_t size, Policy policy) : Array() {
+  Array::Array(DataType type, void* data, size_t size, Policy policy, bool host) : Array() {
   content->type = type;
   content->data = data;
   content->size = size;
   content->policy = policy;
+  content->host = host;
 }
 
 const DataType& Array::getType() const {
