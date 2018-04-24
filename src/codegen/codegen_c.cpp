@@ -41,7 +41,8 @@ const string cHeaders =
   "  int32_t*     mode_ordering; // mode storage ordering\n"
   "  taco_mode_t* mode_types;    // mode storage types\n"
   "  uint8_t***   indices;       // tensor index data (per mode)\n"
-  "  uint8_t*     vals;          // tensor values\n"
+  "  uint8_t*     vals;          // tensor values in host memory\n"
+  "  uint8_t*     d_vals;        // tensor values in device memory\n"
   "} taco_tensor_t;\n"
   "#endif\n"
   "#endif\n";
@@ -190,7 +191,7 @@ string unpackTensorProperty(string varname, const GetProperty* op,
   if (op->property == TensorProperty::Values) {
     // for the values, it's in the last slot
     ret << toCType(tensor->type, true);
-    ret << " restrict " << varname << " = (double*)(";
+    ret /*<< " restrict "*/ << varname << " = (double*)(";
     ret << tensor->name << "->vals);\n";
     return ret.str();
   }
@@ -213,7 +214,7 @@ string unpackTensorProperty(string varname, const GetProperty* op,
   } else {
     tp = "int*";
     auto nm = op->index;
-    ret << tp << " restrict " << varname << " = ";
+    ret << tp /*<< " restrict "*/ << varname << " = ";
     ret << "(int*)(" << tensor->name << "->indices[" << op->mode;
     ret << "][" << nm << "]);\n";
   }
@@ -431,7 +432,7 @@ void resetUniqueNameCounters() {
 string printFuncName(const Function *func) {
   stringstream ret;
   
-  ret << "int " << func->name << "(";
+  ret << "extern \"C\" int " << func->name << "(";
 
   string delimiter = "";
   for (size_t i=0; i<func->outputs.size(); i++) {
@@ -668,7 +669,7 @@ void CodeGen_C::visit(const Sqrt* op) {
 void CodeGen_C::generateShim(const Stmt& func, stringstream &ret) {
   const Function *funcPtr = func.as<Function>();
   
-  ret << "int _shim_" << funcPtr->name << "(void** parameterPack) {\n";
+  ret << "extern \"C\" int _shim_" << funcPtr->name << "(void** parameterPack) {\n";
   ret << "  return " << funcPtr->name << "(";
   
   size_t i=0;
