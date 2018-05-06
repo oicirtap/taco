@@ -490,6 +490,7 @@ void CodeGen_C::compile(Stmt stmt, bool isFirst) {
   }
   out << endl;
   // generate code for the Stmt
+  cout << "codegen compile" << endl;
   stmt.accept(this);
 }
 

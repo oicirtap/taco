@@ -46,6 +46,7 @@ void IRPrinter::print(Stmt stmt) {
     stmt = to<Scope>(stmt)->scopedStmt;
   }
   if (simplify) {
+    cout << "simplify" << endl;
     stmt = ir::simplify(stmt);
   }
   stmt.accept(this);

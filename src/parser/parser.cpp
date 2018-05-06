@@ -63,6 +63,7 @@ const TensorBase& Parser::getResultTensor() const {
 }
 
 TensorBase Parser::parseAssign() {
+  cout << "start parse" << endl;
   content->parsingLhs = true;
   Access lhs = parseAccess();
   content->parsingLhs = false;
@@ -164,6 +165,7 @@ TensorBase Parser::parseAssign() {
   }
   content->resultTensor = content->tensors.at(lhs.getTensorVar().getName());
   content->resultTensor.setIndexExpression(lhs.getIndexVars(), rhs, accumulate);
+  cout << "end parse" << endl;
   return content->resultTensor;
 }
 

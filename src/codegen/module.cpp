@@ -45,7 +45,7 @@ void Module::compileToSource(string path, string prefix) {
     CodeGen_C codegen(source, CodeGen_C::OutputKind::C99Implementation);
     CodeGen_C headergen(header, CodeGen_C::OutputKind::C99Header);
     
-    
+    cout << "module compile" << endl;
     for (auto func: funcs) {
       codegen.compile(func, !didGenRuntime);
       headergen.compile(func, !didGenRuntime);

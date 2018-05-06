@@ -385,10 +385,12 @@ void TensorBase::compile(bool assembleWhileCompute) {
 
   content->assembleWhileCompute = assembleWhileCompute;
   TensorVar tensorVar = getTensorVar();
+  cout << "lower_a" << endl;
   content->assembleFunc = lower::lower(tensorVar, "assemble",
                                        assembleProperties, getAllocSize());
   content->computeFunc  = lower::lower(tensorVar, "compute",
                                        computeProperties, getAllocSize());
+  cout << "lower_b" << endl;
   content->module->addFunction(content->assembleFunc);
   content->module->addFunction(content->computeFunc);
   content->module->compile();
