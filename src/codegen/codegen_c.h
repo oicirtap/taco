@@ -31,6 +31,9 @@ public:
   /// a mix of taco_tensor_t* and scalars into a function call
   static void generateShim(const Stmt& func, std::stringstream &stream);
   
+private:
+  bool external_for;
+
 protected:
   using IRPrinter::visit;
   void visit(const Function*);

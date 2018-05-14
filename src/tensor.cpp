@@ -17,6 +17,7 @@
 #include "taco/storage/array_util.h"
 #include "taco/storage/pack.h"
 #include "taco/ir/ir.h"
+#include "taco/ir/cuda_rewrite.h"
 #include "taco/lower/lower.h"
 #include "lower/iteration_graph.h"
 #include "codegen/module.h"
@@ -391,6 +392,9 @@ void TensorBase::compile(bool assembleWhileCompute) {
   content->computeFunc  = lower::lower(tensorVar, "compute",
                                        computeProperties, getAllocSize());
   cout << "lower_b" << endl;
+
+  content->computeFunc = ir::cuda_rewrite(content->computeFunc);
+
   content->module->addFunction(content->assembleFunc);
   content->module->addFunction(content->computeFunc);
   content->module->compile();
@@ -610,6 +614,8 @@ void TensorBase::compileSource(std::string source) {
                                        assembleProperties, getAllocSize());
   content->computeFunc  = lower::lower(tensorVar, "compute",
                                        computeProperties, getAllocSize());
+
+  //content->computeFunc = ir::cuda_rewrite(content->computeFunc);
 
   stringstream ss;
   CodeGen_C::generateShim(content->assembleFunc, ss);

@@ -479,7 +479,9 @@ string CodeGen_C::genUniqueName(string name) {
 }
 
 CodeGen_C::CodeGen_C(std::ostream &dest, OutputKind outputKind)
-    : IRPrinter(dest, false, true), out(dest), outputKind(outputKind) {}
+    : IRPrinter(dest, false, true), out(dest), outputKind(outputKind) {
+  external_for = true;
+}
 
 CodeGen_C::~CodeGen_C() {}
 
@@ -595,6 +597,36 @@ void CodeGen_C::visit(const For* op) {
       out << "\n";
     default:
       break;
+  }
+
+  if (external_for) {
+    external_for = false;
+    doIndent();
+    stream << "int blockIdx = 0;\n";
+    stream << "int blockDim = 0;\n";
+    stream << "int threadIdx = 0;\n";
+    stream << keywordString(util::toString(op->var.type())) << " ";
+    op->var.accept(this);
+    stream << " = ";
+    op->start.accept(this);
+    stream << " + ";
+    stream << "(blockIdx * blockDim + threadIdx)";
+    stream << " * ";
+    op->increment.accept(this);
+    stream << ";\n";
+
+    stream << keywordString("if ");
+    stream << "(";
+    op->var.accept(this);
+    stream << " < ";
+    op->end.accept(this);
+    stream << ") {\n";
+
+    op->contents.accept(this);
+    stream << "\n";
+    doIndent();
+    stream << "}";
+    return;
   }
   
   IRPrinter::visit(op);
