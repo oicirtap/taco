@@ -21,20 +21,23 @@ int main(int argc, char* argv[]) {
   c.insert({0}, 4.0);
   c.insert({1}, 5.0);
 
-  // Pack data as described by the formats
-  B.pack();
-  c.pack();
+  std::cout << B << std::endl;
+  //std::cout << c << std::endl;
 
   // Form a tensor-vector multiplication expression
   IndexVar i, j, k;
   A(i,j) = B(i,j,k) * c(k);
 
-  // Compile the expression
-  A.compile();
+  //A(i,j) = 1 + 3;
 
-  // Assemble A's indices and numerically compute the result
-  A.assemble();
-  A.compute();
+  //double i = B(0,0,0);
+
+  //Tensor<double> t = B(i,j,k);
+
+  //A(0, 0) = 10 + 1;
+
+  B.insert({0,0,0}, 2.0);
+  std::cout << B << std::endl;
 
   std::cout << A << std::endl;
 }

@@ -86,6 +86,17 @@ public:
   /// Reserve space for `numCoordinates` additional coordinates.
   void reserve(size_t numCoordinates);
 
+  void setNeedsPack(bool needsPack);
+
+  void setNeedsCompute(bool needsPack);
+
+  bool getNeedsPack();
+
+  void notifyDependentTensors();
+
+
+    // TODO(pnoyola): Why is insert inlined in header?
+
   /// Insert a value into the tensor. The number of coordinates must match the
   /// tensor order.
   template <typename T>
@@ -95,6 +106,7 @@ public:
     taco_uassert(getComponentType() == type<T>()) <<
     "Cannot insert a value of type '" << type<T>() << "' " <<
     "into a tensor with component type " << getComponentType();
+    notifyDependentTensors();
     if ((coordinateBuffer->size() - coordinateBufferUsed) < coordinateSize) {
       coordinateBuffer->resize(coordinateBuffer->size() + coordinateSize);
     }
@@ -106,6 +118,7 @@ public:
     TypedComponentPtr valLoc(getComponentType(), coordLoc);
     *valLoc = TypedComponentVal(getComponentType(), &value);
     coordinateBufferUsed += coordinateSize;
+    setNeedsPack(true);
   }
 
   /// Insert a value into the tensor. The number of coordinates must match the
@@ -117,6 +130,7 @@ public:
     taco_uassert(getComponentType() == type<T>()) <<
       "Cannot insert a value of type '" << type<T>() << "' " <<
       "into a tensor with component type " << getComponentType();
+    notifyDependentTensors();
     if ((coordinateBuffer->size() - coordinateBufferUsed) < coordinateSize) {
       coordinateBuffer->resize(coordinateBuffer->size() + coordinateSize);
     }
@@ -128,11 +142,13 @@ public:
     TypedComponentPtr valLoc(getComponentType(), coordLoc);
     *valLoc = TypedComponentVal(getComponentType(), &value);
     coordinateBufferUsed += coordinateSize;
+    setNeedsPack(true);
   }
 
   /// Pack tensor into the given format
   void pack();
 
+  // TODO(pnoyola): how does set and get storage relate to the rest?
   /// Set the tensor's storage
   void setStorage(TensorStorage storage);
 
@@ -232,6 +248,17 @@ public:
 
   /// Print a tensor to a stream.
   friend std::ostream& operator<<(std::ostream&, const TensorBase&);
+  friend std::ostream& operator<<(std::ostream&, TensorBase&);
+
+// package private?
+  /// Updates the values stored at this tensor before computation.
+  void syncValues();
+
+  void addDependentTensor(TensorBase tensor);
+
+  std::vector<TensorBase> getDependentTensors();
+
+  std::ostream& print(std::ostream& os) { return os; }
 
 private:
   struct Content;
