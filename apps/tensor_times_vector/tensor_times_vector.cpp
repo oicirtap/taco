@@ -15,13 +15,14 @@ int main(int argc, char* argv[]) {
   Tensor<double> c({4},     sv);
 
   // Insert data into B and c
-  B.insert({0,0,0}, 1.0);
-  B.insert({1,2,0}, 2.0);
-  B.insert({1,3,1}, 3.0);
-  c.insert({0}, 4.0);
-  c.insert({1}, 5.0);
+  B(0,0,0) = 1.0;
+  B(1,2,0) = 2.0;
+  B(1,3,1) = 3.0;
+  c(0) = 4.0;
+  c(1) = 5.0;
+  //c.insert({1}, 5.0);
 
-  std::cout << B << std::endl;
+  //std::cout << B << std::endl;
   //std::cout << c << std::endl;
 
   // Form a tensor-vector multiplication expression
@@ -36,8 +37,8 @@ int main(int argc, char* argv[]) {
 
   //A(0, 0) = 10 + 1;
 
-  B.insert({0,0,0}, 2.0);
-  std::cout << B << std::endl;
+  //B.insert({0,0,0}, 2.0);
+  //std::cout << B << std::endl;
 
   std::cout << A << std::endl;
 }

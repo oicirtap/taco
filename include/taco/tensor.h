@@ -172,6 +172,11 @@ public:
   /// Create an index expression that accesses (reads or writes) this tensor.
   Access operator()(const std::vector<IndexVar>& indices);
 
+  Access operator()() {
+    return this->operator()(std::vector<IndexVar>());
+  }
+
+  //TODO(pnoyola): ask about this template stuff
   /// Create an index expression that accesses (reads) this tensor.
   template <typename... IndexVars>
   const Access operator()(const IndexVars&... indices) const {
@@ -183,6 +188,13 @@ public:
   Access operator()(const IndexVars&... indices) {
     return this->operator()({indices...});
   }
+
+  ///// Create an index expression that accesses (reads) this tensor.
+  const Access operator()(const std::vector<int>& indices) const;
+
+  /// Create an index expression that accesses (reads or writes) this tensor.
+  Access operator()(const std::vector<int>& indices);
+
 
   /// Assign an expression to a scalar tensor.
   void operator=(const IndexExpr&);
@@ -474,7 +486,6 @@ public:
     size_t                           count;
     bool                             advance;
   };
-
   const_iterator<size_t> begin() const {
     return const_iterator<size_t>(this);
   }
