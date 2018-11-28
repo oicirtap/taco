@@ -41,4 +41,7 @@ int main(int argc, char* argv[]) {
   //std::cout << B << std::endl;
 
   std::cout << A << std::endl;
+
+  double n = A.getValue<double>({1,2});
+  std::cout << n << std::endl;
 }

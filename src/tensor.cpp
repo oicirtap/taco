@@ -454,7 +454,6 @@ struct AccessTensorScalarNode : public AccessNode {
   }
 };
 
-
 const Access TensorBase::operator()(const std::vector<IndexVar>& indices) const {
   taco_uassert(indices.size() == (size_t)getOrder())
       << "A tensor of order " << getOrder() << " must be indexed with "

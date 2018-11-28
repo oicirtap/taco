@@ -83,6 +83,7 @@ public:
   /// Get the format the tensor is packed into
   const Format& getFormat() const;
 
+  // TODO(pnoyola): remove?
   /// Reserve space for `numCoordinates` additional coordinates.
   void reserve(size_t numCoordinates);
 
@@ -92,10 +93,11 @@ public:
 
   bool getNeedsPack();
 
+  // TODO(pnoyola): make private?
   void notifyDependentTensors();
 
 
-    // TODO(pnoyola): Why is insert inlined in header?
+  // TODO(pnoyola): Why is insert inlined in header?
 
   /// Insert a value into the tensor. The number of coordinates must match the
   /// tensor order.
@@ -145,6 +147,9 @@ public:
     setNeedsPack(true);
   }
 
+  template <typename T>
+  T getValue(const std::vector<size_t>& coordinate);
+
   /// Pack tensor into the given format
   void pack();
 
@@ -160,6 +165,7 @@ public:
   /// to the format of the tensor.
   TensorStorage& getStorage();
 
+  // TODO(pnoyola): discuss?
   /// Zero out the values
   void zero();
 
@@ -176,7 +182,6 @@ public:
     return this->operator()(std::vector<IndexVar>());
   }
 
-  //TODO(pnoyola): ask about this template stuff
   /// Create an index expression that accesses (reads) this tensor.
   template <typename... IndexVars>
   const Access operator()(const IndexVars&... indices) const {
@@ -240,6 +245,7 @@ public:
   size_t getAllocSize() const;
 
   /// Get the taco_tensor_t representation of this tensor.
+  // TODO(pnoyola): discuss
   taco_tensor_t* getTacoTensorT();
 
   /// True iff two tensors have the same type and the same values.
@@ -673,6 +679,31 @@ void packOperands(const TensorBase& tensor);
 template <typename CType>
 Tensor<CType> iterate(const TensorBase& tensor) {
   return Tensor<CType>(tensor);
+}
+
+/// Iterate over the typed values of a TensorBase.
+template <typename CType>
+Tensor<CType> iterate(TensorBase& tensor) {
+  return Tensor<CType>(tensor);
+}
+
+template <typename T>
+T TensorBase::getValue(const std::vector<size_t>& coordinate) {
+  taco_uassert(coordinate.size() == (size_t)getOrder()) <<
+    "Wrong number of indices";
+  taco_uassert(getComponentType() == type<T>()) <<
+    "Cannot get a value of type '" << type<T>() << "' " <<
+    "from a tensor with component type " << getComponentType();
+  for (size_t dim = 0; dim < (size_t)getOrder(); dim ++) {
+    taco_uassert(coordinate.at(dim) < (size_t)getDimension(dim)) <<
+      "Coord exceeds tensor dimensions";
+  }
+  for (auto& value : iterate<T>(*this)) {
+    if (value.first == coordinate) {
+      return value.second;
+    }
+  }
+  return 0;
 }
 
 }
