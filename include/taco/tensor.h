@@ -24,6 +24,40 @@
 
 namespace taco {
 
+template<typename T, int order>
+class Element {
+public:
+  /**
+  Element() : coordinate(order, 0), e_value(0) {}
+
+  Element(const std::vector<int> coordinate, const T& v)
+  : coordinate(coordinate), e_value(v) {
+    taco_uassert(coordinate.size() == (size_t)order) <<
+      "Wrong number of indices";
+  }**/
+
+  template<typename... CoordType>
+  Element(T v, CoordType... coordinates) : coordinate({coordinates...}), e_value(v) {
+    taco_uassert(coordinate.size() == (size_t)order) <<
+      "Wrong number of indices";
+  }
+
+  int dimension(int mode) const {
+    taco_uassert(mode < order) << "Invalid mode";
+    return coordinate[mode];
+  }
+
+  const std::vector<int>& dimensions() const {
+    return coordinate;
+  }
+
+  const T& value() const { return e_value; }
+
+protected:
+  std::vector<int> coordinate;
+  T e_value;
+};
+
 /// TensorBase is the super-class for all tensors. You can use it directly to
 /// avoid templates, or you can use the templated `Tensor<T>` that inherits from
 /// `TensorBase`.
@@ -145,6 +179,13 @@ public:
     *valLoc = TypedComponentVal(getComponentType(), &value);
     coordinateBufferUsed += coordinateSize;
     setNeedsPack(true);
+  }
+
+  template <typename InputIterator>
+  void setFromElements(const InputIterator& begin, const InputIterator& end) {
+    for (InputIterator it(begin); it != end; ++it) {
+      insert(it->dimensions(), it->value());
+    }
   }
 
   template <typename T>

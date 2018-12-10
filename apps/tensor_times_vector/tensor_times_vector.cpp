@@ -3,6 +3,8 @@
 
 using namespace taco;
 
+typedef Element<double, 3> T3;
+
 int main(int argc, char* argv[]) {
   // Create formats
   Format csr({Dense,Sparse});
@@ -15,9 +17,11 @@ int main(int argc, char* argv[]) {
   Tensor<double> c({4},     sv);
 
   // Insert data into B and c
-  B(0,0,0) = 1.0;
-  B(1,2,0) = 2.0;
-  B(1,3,1) = 3.0;
+  std::vector<T3> b_element_list;
+  b_element_list.push_back(T3(1.0,0,0,0));
+  b_element_list.push_back(T3(2.0,1,2,0));
+  b_element_list.push_back(T3(3.0,1,3,1));
+  B.setFromElements(b_element_list.begin(), b_element_list.end());
   c(0) = 4.0;
   c(1) = 5.0;
   //c.insert({1}, 5.0);
