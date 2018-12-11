@@ -1,5 +1,5 @@
-#ifndef TACO_TENSOR_H
-#define TACO_TENSOR_H
+#ifndef TACO_TENSOR_API_H
+#define TACO_TENSOR_API_H
 
 #include <memory>
 #include <string>
@@ -89,46 +89,36 @@ public:
   TensorBase(std::string name, Datatype ctype, std::vector<int> dimensions,
              Format format);
 
-  /// Set the name of the tensor.
-  void setName(std::string name) const;
-
   /// Get the name of the tensor.
-  std::string getName() const;
+  std::string name() const;
 
   /// Get the order of the tensor (the number of modes).
-  int getOrder() const;
+  int order() const;
 
   /// Get the dimension of a tensor mode.
   int getDimension(int mode) const;
 
   /// Get a vector with the dimension of each tensor mode.
-  const std::vector<int>& getDimensions() const;
+  const std::vector<int>& dimensions() const;
 
   /// Return the type of the tensor components).
-  const Datatype& getComponentType() const; 
+  const Datatype& componentType() const;
 
   /// Get the format the tensor is packed into
-  const Format& getFormat() const;
+  const Format& format() const;
 
-  // TODO(pnoyola): remove?
-  /// Reserve space for `numCoordinates` additional coordinates.
-  void reserve(size_t numCoordinates);
-
-  // TODO(pnoyola): make private?
+  // TODO(pnoyola): make private
   void notifyDependentTensors();
-
-
-  // TODO(pnoyola): Why is insert inlined in header?
 
   /// Insert a value into the tensor. The number of coordinates must match the
   /// tensor order.
   template <typename T>
   void insert(const std::initializer_list<int>& coordinate, T value) {
-    taco_uassert(coordinate.size() == (size_t)getOrder()) <<
+    taco_uassert(coordinate.size() == (size_t)order()) <<
     "Wrong number of indices";
-    taco_uassert(getComponentType() == type<T>()) <<
+    taco_uassert(componentType() == type<T>()) <<
     "Cannot insert a value of type '" << type<T>() << "' " <<
-    "into a tensor with component type " << getComponentType();
+    "into a tensor with component type " << componentType();
     notifyDependentTensors();
     if ((coordinateBuffer->size() - coordinateBufferUsed) < coordinateSize) {
       coordinateBuffer->resize(coordinateBuffer->size() + coordinateSize);
@@ -138,8 +128,8 @@ public:
       *coordLoc = idx;
       coordLoc++;
     }
-    TypedComponentPtr valLoc(getComponentType(), coordLoc);
-    *valLoc = TypedComponentVal(getComponentType(), &value);
+    TypedComponentPtr valLoc(componentType(), coordLoc);
+    *valLoc = TypedComponentVal(componentType(), &value);
     coordinateBufferUsed += coordinateSize;
     setNeedsPack(true);
   }
@@ -148,11 +138,11 @@ public:
   /// tensor order.
   template <typename T>
   void insert(const std::vector<int>& coordinate, T value) {
-    taco_uassert(coordinate.size() == (size_t)getOrder()) <<
+    taco_uassert(coordinate.size() == (size_t)order()) <<
     "Wrong number of indices";
-    taco_uassert(getComponentType() == type<T>()) <<
+    taco_uassert(componentType() == type<T>()) <<
       "Cannot insert a value of type '" << type<T>() << "' " <<
-      "into a tensor with component type " << getComponentType();
+      "into a tensor with component type " << componentType();
     notifyDependentTensors();
     if ((coordinateBuffer->size() - coordinateBufferUsed) < coordinateSize) {
       coordinateBuffer->resize(coordinateBuffer->size() + coordinateSize);
@@ -162,8 +152,8 @@ public:
       *coordLoc = idx;
       coordLoc++;
     }
-    TypedComponentPtr valLoc(getComponentType(), coordLoc);
-    *valLoc = TypedComponentVal(getComponentType(), &value);
+    TypedComponentPtr valLoc(componentType(), coordLoc);
+    *valLoc = TypedComponentVal(componentType(), &value);
     coordinateBufferUsed += coordinateSize;
     setNeedsPack(true);
   }
@@ -181,24 +171,13 @@ public:
   /// Pack tensor into the given format
   void pack();
 
-  // TODO(pnoyola): how does set and get storage relate to the rest?
-  /// Set the tensor's storage
-  void setStorage(TensorStorage storage);
+  /// Returns the storage for this tensor. Tensor values are stored according
+  /// to the format of the tensor.
+  const TensorStorage& storage() const;
 
   /// Returns the storage for this tensor. Tensor values are stored according
   /// to the format of the tensor.
-  const TensorStorage& getStorage() const;
-
-  /// Returns the storage for this tensor. Tensor values are stored according
-  /// to the format of the tensor.
-  TensorStorage& getStorage();
-
-  // TODO(pnoyola): discuss?
-  /// Zero out the values
-  void zero();
-
-  /// Returns the tensor var for this tensor.
-  const TensorVar& getTensorVar() const;
+  TensorStorage& storage();
 
   /// Create an index expression that accesses (reads) this tensor.
   const Access operator()(const std::vector<IndexVar>& indices) const;
@@ -228,15 +207,8 @@ public:
   /// Create an index expression that accesses (reads or writes) this tensor.
   Access operator()(const std::vector<int>& indices);
 
-
   /// Assign an expression to a scalar tensor.
   void operator=(const IndexExpr&);
-
-  /// Set the expression to be evaluated when calling compute or assemble.
-  void setAssignment(Assignment assignment);
-
-  /// Set the expression to be evaluated when calling compute or assemble.
-  Assignment getAssignment() const;
 
   /// Compile the tensor expression.
   void compile(bool assembleWhileCompute=false);
@@ -249,32 +221,6 @@ public:
 
   /// Compile, assemble and compute as needed.
   void evaluate();
-
-  /// Get the source code of the kernel functions.
-  std::string getSource() const;
-
-  /// Compile the source code of the kernel functions. This function is optional
-  /// and mainly intended for experimentation. If the source code is not set
-  /// then it will will be created it from the given expression.
-  void compileSource(std::string source);
-
-  /// Print the IR loops that compute the tensor's expression.
-  void printComputeIR(std::ostream& stream, bool color=false,
-                      bool simplify=false) const;
-
-  /// Print the IR loops that assemble the tensor's expression.
-  void printAssembleIR(std::ostream& stream, bool color=false,
-                       bool simplify=false) const;
-
-  /// Set the size of the initial index allocations.  The default size is 1MB.
-  void setAllocSize(size_t allocSize);
-
-  /// Get the size of the initial index allocations.
-  size_t getAllocSize() const;
-
-  /// Get the taco_tensor_t representation of this tensor.
-  // TODO(pnoyola): discuss
-  taco_tensor_t* getTacoTensorT();
 
   /// True iff two tensors have the same type and the same values.
   friend bool equals(const TensorBase&, const TensorBase&);
@@ -302,10 +248,32 @@ public:
   std::ostream& print(std::ostream& os) { return os; }
 
 private:
-  void syncValues();
-  void addDependentTensor(TensorBase tensor);
+  // TODO(pnoyola): Move private methods to Tensor implementation class.
+  /// Set the name of the tensor.
+  void setName(std::string name) const;
+
+  // Returns the tensor var for this tensor.
+  const TensorVar& getTensorVar() const;
+
   void setNeedsPack(bool needsPack);
+
   void setNeedsCompute(bool needsPack);
+
+  void syncValues();
+
+  void addDependentTensor(TensorBase tensor);
+
+  /// Set the expression to be evaluated when calling compute or assemble.
+  void setAssignment(Assignment assignment);
+
+  /// Set the expression to be evaluated when calling compute or assemble.
+  Assignment getAssignment() const;
+
+  /// Set the size of the initial index allocations.  The default size is 1MB.
+  void setAllocSize(size_t allocSize);
+
+  /// Get the size of the initial index allocations.
+  size_t getAllocSize() const;
 
   struct Content;
   std::shared_ptr<Content> content;
@@ -354,14 +322,14 @@ public:
   /// Create a tensor from a TensorBase instance. The Tensor and TensorBase
   /// objects will reference the same underlying tensor so it is a shallow copy.
   Tensor(const TensorBase& tensor) : TensorBase(tensor) {
-    taco_uassert(tensor.getComponentType() == type<CType>()) <<
-        "Assigning TensorBase with " << tensor.getComponentType() <<
+    taco_uassert(tensor.componentType() == type<CType>()) <<
+        "Assigning TensorBase with " << tensor.componentType() <<
         " components to a Tensor<" << type<CType>() << ">";
   }
 
   /// Simple transpose that packs a new tensor from the values in the current tensor
   Tensor<CType> transpose(std::string name, std::vector<int> newModeOrdering) const {
-    return transpose(name, newModeOrdering, getFormat());
+    return transpose(name, newModeOrdering, format());
   }
   Tensor<CType> transpose(std::vector<int> newModeOrdering) const {
     return transpose(util::uniqueName('A'), newModeOrdering);
@@ -373,7 +341,7 @@ public:
     // Reorder dimensions to match new mode ordering
     std::vector<int> newDimensions;
     for (int mode : newModeOrdering) {
-      newDimensions.push_back(getDimensions()[mode]);
+      newDimensions.push_back(dimensions()[mode]);
     }
 
     Tensor<CType> newTensor(name, newDimensions, format);
@@ -431,10 +399,10 @@ public:
 
     const_iterator(const Tensor<CType>* tensor, bool isEnd = false) :
         tensor(tensor),
-        coord(TypedIndexVector(type<T>(), tensor->getOrder())),
-        ptrs(TypedIndexVector(type<T>(), tensor->getOrder())),
-        curVal({std::vector<T>(tensor->getOrder()), 0}),
-        count(1 + (size_t)isEnd * tensor->getStorage().getIndex().getSize()),
+        coord(TypedIndexVector(type<T>(), tensor->order())),
+        ptrs(TypedIndexVector(type<T>(), tensor->order())),
+        curVal({std::vector<T>(tensor->order()), 0}),
+        count(1 + (size_t)isEnd * tensor->storage().getIndex().getSize()),
         advance(false) {
       advanceIndex();
     }
@@ -445,17 +413,17 @@ public:
     }
 
     bool advanceIndex(int lvl) {
-      const auto& modeTypes = tensor->getFormat().getModeFormats();
-      const auto& modeOrdering = tensor->getFormat().getModeOrdering();
+      const auto& modeTypes = tensor->format().getModeFormats();
+      const auto& modeOrdering = tensor->format().getModeOrdering();
 
-      if (lvl == tensor->getOrder()) {
+      if (lvl == tensor->order()) {
         if (advance) {
           advance = false;
           return false;
         }
 
         const TypedIndexVal idx = (lvl == 0) ? TypedIndexVal(type<T>(), 0) : ptrs[lvl - 1];
-        curVal.second = ((CType *)tensor->getStorage().getValues().getData())[idx.getAsIndex()];
+        curVal.second = ((CType *)tensor->storage().getValues().getData())[idx.getAsIndex()];
 
         for (int i = 0; i < lvl; ++i) {
           const size_t mode = modeOrdering[i];
@@ -466,7 +434,7 @@ public:
         return true;
       }
       
-      const auto storage = tensor->getStorage();
+      const auto storage = tensor->storage();
       const auto modeIndex = storage.getIndex().getModeIndex(lvl);
 
       if (modeTypes[lvl] == Dense) {
@@ -612,7 +580,7 @@ TensorBase makeCSR(const std::string& name, const std::vector<int>& dimensions,
                    int* rowptr, int* colidx, T* vals) {
   taco_uassert(dimensions.size() == 2) << error::requires_matrix;
   Tensor<T> tensor(name, dimensions, CSR);
-  auto storage = tensor.getStorage();
+  auto storage = tensor.storage();
   auto index = makeCSRIndex(dimensions[0], rowptr, colidx);
   storage.setIndex(index);
   storage.setValues(makeArray(vals, index.getSize(), Array::UserOwns));
@@ -627,7 +595,7 @@ TensorBase makeCSR(const std::string& name, const std::vector<int>& dimensions,
                    const std::vector<T>& vals) {
   taco_uassert(dimensions.size() == 2) << error::requires_matrix;
   Tensor<T> tensor(name, dimensions, CSR);
-  auto storage = tensor.getStorage();
+  auto storage = tensor.storage();
   storage.setIndex(makeCSRIndex(rowptr, colidx));
   storage.setValues(makeArray(vals));
   return tensor;
@@ -638,9 +606,9 @@ TensorBase makeCSR(const std::string& name, const std::vector<int>& dimensions,
 template<typename T>
 void getCSRArrays(const TensorBase& tensor,
                   int** rowptr, int** colidx, T** vals) {
-  taco_uassert(tensor.getFormat() == CSR) <<
-  "The tensor " << tensor.getName() << " is not defined in the CSR format";
-  auto storage = tensor.getStorage();
+  taco_uassert(tensor.format() == CSR) <<
+  "The tensor " << tensor.name() << " is not defined in the CSR format";
+  auto storage = tensor.storage();
   auto index = storage.getIndex();
   
   auto rowptrArr = index.getModeIndex(1).getIndexArray(0);
@@ -659,7 +627,7 @@ TensorBase makeCSC(const std::string& name, const std::vector<int>& dimensions,
                    int* colptr, int* rowidx, T* vals) {
   taco_uassert(dimensions.size() == 2) << error::requires_matrix;
   Tensor<T> tensor(name, dimensions, CSC);
-  auto storage = tensor.getStorage();
+  auto storage = tensor.storage();
   auto index = makeCSCIndex(dimensions[1], colptr, rowidx);
   storage.setIndex(index);
   storage.setValues(makeArray(vals, index.getSize(), Array::UserOwns));
@@ -674,7 +642,7 @@ TensorBase makeCSC(const std::string& name, const std::vector<int>& dimensions,
                    const std::vector<T>& vals) {
   taco_uassert(dimensions.size() == 2) << error::requires_matrix;
   Tensor<T> tensor(name, dimensions, CSC);
-  auto storage = tensor.getStorage();
+  auto storage = tensor.storage();
   storage.setIndex(makeCSCIndex(colptr, rowidx));
   storage.setValues(makeArray(vals));
   return tensor;
@@ -685,9 +653,9 @@ TensorBase makeCSC(const std::string& name, const std::vector<int>& dimensions,
 template<typename T>
 void getCSCArrays(const TensorBase& tensor,
                   int** colptr, int** rowidx, T** vals) {
-  taco_uassert(tensor.getFormat() == CSC) <<
-  "The tensor " << tensor.getName() << " is not defined in the CSC format";
-  auto storage = tensor.getStorage();
+  taco_uassert(tensor.format() == CSC) <<
+  "The tensor " << tensor.name() << " is not defined in the CSC format";
+  auto storage = tensor.storage();
   auto index = storage.getIndex();
   
   auto colptrArr = index.getModeIndex(1).getIndexArray(0);
@@ -717,12 +685,12 @@ Tensor<CType> iterate(TensorBase& tensor) {
 
 template <typename T>
 T TensorBase::getValue(const std::vector<size_t>& coordinate) {
-  taco_uassert(coordinate.size() == (size_t)getOrder()) <<
+  taco_uassert(coordinate.size() == (size_t)order()) <<
     "Wrong number of indices";
-  taco_uassert(getComponentType() == type<T>()) <<
+  taco_uassert(componentType() == type<T>()) <<
     "Cannot get a value of type '" << type<T>() << "' " <<
-    "from a tensor with component type " << getComponentType();
-  for (size_t dim = 0; dim < (size_t)getOrder(); dim ++) {
+    "from a tensor with component type " << componentType();
+  for (size_t dim = 0; dim < (size_t)order(); dim ++) {
     taco_uassert(coordinate.at(dim) < (size_t)getDimension(dim)) <<
       "Coord exceeds tensor dimensions";
   }
