@@ -385,71 +385,6 @@ static inline T getValue(const IndexExpr& expr) {
   return getVal.val;
 }
 
-//TODO(pnoyola): What kind of pointer should I be using for tensor?
-
-/// Inherits Access and adds a TensorBase object, so that we can retrieve the
-/// tensors that was used in an expression when we later want to pack arguments.
-struct AccessTensorScalarNode : public AccessNode {
-  AccessTensorScalarNode(TensorBase * tensor, const std::vector<int>& indices)
-      :  AccessNode(tensor->getTensorVar(), std::vector<IndexVar>()), tensor(tensor), indices(indices) {}
-
-  TensorBase * tensor;
-  const std::vector<int> indices;
-
-  virtual void setAssignment(const Assignment& assignment) {
-    //LiteralNode literal = (LiteralNode)assignment.getRhs();
-    switch (tensor->getTensorVar().getType().getDataType().getKind()) {
-      case Datatype::Bool:
-        tensor->insert(indices, getValue<bool>(assignment.getRhs()));
-        break;
-      case Datatype::UInt8:
-        tensor->insert(indices, getValue<uint8_t>(assignment.getRhs()));
-        break;
-      case Datatype::UInt16:
-        tensor->insert(indices, getValue<uint16_t>(assignment.getRhs()));
-        break;
-      case Datatype::UInt32:
-        tensor->insert(indices, getValue<uint32_t>(assignment.getRhs()));
-        break;
-      case Datatype::UInt64:
-        tensor->insert(indices, getValue<uint64_t>(assignment.getRhs()));
-        break;
-      case Datatype::UInt128:
-        taco_not_supported_yet;
-        break;
-      case Datatype::Int8:
-        tensor->insert(indices, getValue<int8_t>(assignment.getRhs()));
-        break;
-      case Datatype::Int16:
-        tensor->insert(indices, getValue<int16_t>(assignment.getRhs()));
-        break;
-      case Datatype::Int32:
-        tensor->insert(indices, getValue<int32_t>(assignment.getRhs()));
-        break;
-      case Datatype::Int64:
-        tensor->insert(indices, getValue<int64_t>(assignment.getRhs()));
-        break;
-      case Datatype::Int128:
-        taco_not_supported_yet;
-        break;
-      case Datatype::Float32:
-        tensor->insert(indices, getValue<float>(assignment.getRhs()));
-        break;
-      case Datatype::Float64:
-        tensor->insert(indices, getValue<double>(assignment.getRhs()));
-        break;
-      case Datatype::Complex64:
-        tensor->insert(indices, getValue<std::complex<float>>(assignment.getRhs()));
-        break;
-      case Datatype::Complex128:
-        tensor->insert(indices, getValue<std::complex<double>>(assignment.getRhs()));
-        break;
-      case Datatype::Undefined:
-        break;
-    }
-  }
-};
-
 const Access TensorBase::operator()(const std::vector<IndexVar>& indices) const {
   taco_uassert(indices.size() == (size_t)getOrder())
       << "A tensor of order " << getOrder() << " must be indexed with "
@@ -466,14 +401,17 @@ Access TensorBase::operator()(const std::vector<IndexVar>& indices) {
   return Access(new AccessTensorNode(*this, indices));
 }
 
-Access TensorBase::operator()(const std::vector<int>& indices) {
+
+AccessTensorScalarNode TensorBase::operator()(const std::vector<int>& indices) {
   taco_uassert(indices.size() == (size_t)getOrder())
       << "A tensor of order " << getOrder() << " must be indexed with "
       << getOrder() << " variables, but is indexed with:  "
       << util::join(indices);
+  AccessTensorScalarNode a(this, indices);
 
-  return Access(new AccessTensorScalarNode(this, indices));
+  return a;
 }
+
 
 void TensorBase::compile(bool assembleWhileCompute) {
   Assignment assignment = getAssignment();

@@ -24,6 +24,8 @@
 
 namespace taco {
 
+struct AccessTensorScalarNode;
+
 template<typename T, int order>
 class Element {
 public:
@@ -176,7 +178,7 @@ public:
   }
 
   template <typename T>
-  T getValue(const std::vector<size_t>& coordinate);
+  T getValue(const std::vector<int>& coordinate);
 
   /// Pack tensor into the given format
   void pack();
@@ -211,23 +213,60 @@ public:
   }
 
   /// Create an index expression that accesses (reads) this tensor.
-  template <typename... IndexVars>
-  const Access operator()(const IndexVars&... indices) const {
-    return static_cast<const TensorBase*>(this)->operator()({indices...});
+  template <typename IndexVar,
+            typename std::enable_if<!std::is_integral<IndexVar>::value,
+                                    IndexVar>::type* = nullptr>
+  const Access operator()(const IndexVar& index) const {
+    return static_cast<const TensorBase*>(this)->operator()({index});
   }
 
-  /// Create an index expression that accesses (reads or writes) this tensor.
-  template <typename... IndexVars>
-  Access operator()(const IndexVars&... indices) {
-    return this->operator()({indices...});
+  /// Create an index expression that accesses (reads) this tensor.
+  template <typename IndexVar,
+            typename... IndexVars,
+            typename std::enable_if<!std::is_integral<IndexVar>::value,
+                                    IndexVar>::type* = nullptr>
+  const Access operator()(const IndexVar index, const IndexVars&... indices) const {
+    return static_cast<const TensorBase*>(this)->operator()({index, indices...});
   }
 
+  /// Create an index expression that accesses (reads) this tensor.
+  template <typename IndexVar,
+            typename std::enable_if<!std::is_integral<IndexVar>::value,
+                                    IndexVar>::type* = nullptr>
+  Access operator()(const IndexVar& index) {
+    return this->operator()({index});
+  }
+
+  /// Create an index expression that accesses (reads) this tensor.
+  template <typename IndexVar,
+            typename... IndexVars,
+            typename std::enable_if<!std::is_integral<IndexVar>::value,
+                                    IndexVar>::type* = nullptr>
+  Access operator()(const IndexVar index, const IndexVars&... indices) {
+    return this->operator()({index, indices...});
+  }
+
+  /*
   ///// Create an index expression that accesses (reads) this tensor.
   const Access operator()(const std::vector<int>& indices) const;
+  */
 
   /// Create an index expression that accesses (reads or writes) this tensor.
-  Access operator()(const std::vector<int>& indices);
+  AccessTensorScalarNode operator()(const std::vector<int>& indices);
+  
+  /// Create an index expression that accesses (reads) this tensor.
+  template <typename IndexVar,
+            typename std::enable_if<std::is_integral<IndexVar>::value,
+                                    IndexVar>::type* = nullptr>
+  AccessTensorScalarNode operator()(const IndexVar& index);
+  
 
+  /// Create an index expression that accesses (reads) this tensor.
+  template <typename IndexVar,
+            typename... IndexVars,
+            typename std::enable_if<std::is_integral<IndexVar>::value,
+                                    IndexVar>::type* = nullptr>
+  AccessTensorScalarNode operator()(const IndexVar index, const IndexVars&... indices);
 
   /// Assign an expression to a scalar tensor.
   void operator=(const IndexExpr&);
@@ -716,22 +755,67 @@ Tensor<CType> iterate(TensorBase& tensor) {
 }
 
 template <typename T>
-T TensorBase::getValue(const std::vector<size_t>& coordinate) {
+T TensorBase::getValue(const std::vector<int>& coordinate) {
   taco_uassert(coordinate.size() == (size_t)getOrder()) <<
     "Wrong number of indices";
   taco_uassert(getComponentType() == type<T>()) <<
     "Cannot get a value of type '" << type<T>() << "' " <<
     "from a tensor with component type " << getComponentType();
+
+  std::vector<size_t> coord;
+  for (int i: coordinate) {
+    coord.push_back((size_t)i);
+  }
+
   for (size_t dim = 0; dim < (size_t)getOrder(); dim ++) {
-    taco_uassert(coordinate.at(dim) < (size_t)getDimension(dim)) <<
+    taco_uassert(coord.at(dim) < (size_t)getDimension(dim)) <<
       "Coord exceeds tensor dimensions";
   }
   for (auto& value : iterate<T>(*this)) {
-    if (value.first == coordinate) {
+    if (value.first == coord) {
       return value.second;
     }
   }
   return 0;
+}
+
+//TODO(pnoyola): What kind of pointer should I be using for tensor?
+
+/// Inherits Access and adds a TensorBase object, so that we can retrieve the
+/// tensors that was used in an expression when we later want to pack arguments.
+struct AccessTensorScalarNode {
+  AccessTensorScalarNode(TensorBase * tensor, const std::vector<int>& indices)
+      : tensor(tensor), indices(indices) {}
+
+  TensorBase * tensor;
+  const std::vector<int> indices;
+
+  template <typename T>
+  void operator=(T scalar) {
+    tensor->insert(indices, scalar);
+  }
+
+  template <typename T>
+  operator T() {
+    return tensor->getValue<T>(indices);
+  }
+};
+
+/// Create an index expression that accesses (reads) this tensor.
+template <typename IndexVar,
+          typename std::enable_if<std::is_integral<IndexVar>::value,
+                                  IndexVar>::type*>
+AccessTensorScalarNode TensorBase::operator()(const IndexVar& index) {
+  return this->operator()({index});
+}
+
+/// Create an index expression that accesses (reads) this tensor.
+template <typename IndexVar,
+          typename... IndexVars,
+          typename std::enable_if<std::is_integral<IndexVar>::value,
+                                  IndexVar>::type*>
+AccessTensorScalarNode TensorBase::operator()(const IndexVar index, const IndexVars&... indices) {
+  return this->operator()({index, indices...});
 }
 
 }
