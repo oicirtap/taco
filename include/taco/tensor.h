@@ -795,9 +795,15 @@ struct AccessTensorScalarNode {
     tensor->insert(indices, scalar);
   }
 
-  template <typename T>
+  template <typename T,
+            typename std::enable_if<std::is_integral<T>::value,
+                                    IndexVar>::type*>
   operator T() {
     return tensor->getValue<T>(indices);
+  }
+
+  operator double() {
+    return tensor->getValue<double>(indices);
   }
 };
 
