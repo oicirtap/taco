@@ -60,6 +60,8 @@ struct TensorBase::Content {
   TensorStorage      storage;
   TensorVar          tensorVar;
   Assignment         assignment;
+  Assignment         transposeAssignment;
+  bool               transposed;
 
   size_t             allocSize;
   size_t             valuesSize;
@@ -371,17 +373,6 @@ void TensorBase::zero() {
   getStorage().getValues().zero();
 }
 
-/// Inherits Access and adds a TensorBase object, so that we can retrieve the
-/// tensors that was used in an expression when we later want to pack arguments.
-struct AccessTensorNode : public AccessNode {
-  AccessTensorNode(TensorBase tensor, const std::vector<IndexVar>& indices)
-      :  AccessNode(tensor.getTensorVar(), indices), tensor(tensor) {}
-  TensorBase tensor;
-  virtual void setAssignment(const Assignment& assignment) {
-    tensor.setAssignment(assignment);
-  }
-};
-
 const Access TensorBase::operator()(const std::vector<IndexVar>& indices) const {
   taco_uassert(indices.size() == (size_t)getOrder())
       << "A tensor of order " << getOrder() << " must be indexed with "
@@ -540,10 +531,21 @@ void TensorBase::operator=(const IndexExpr& expr) {
 
 void TensorBase::setAssignment(Assignment assignment) {
   content->assignment = makeReductionNotation(assignment);
+  content->transposeAssignment = Assignment();
+  content->transposed = false;
 }
 
 Assignment TensorBase::getAssignment() const {
   return content->assignment;
+}
+
+void TensorBase::setTransposeAssignment(Assignment assignment) {
+  content->transposeAssignment = makeReductionNotation(assignment);
+  content->transposed = true;
+}
+
+Assignment TensorBase::getTransposeAssignment() const {
+  return content->transposeAssignment;
 }
 
 void TensorBase::printComputeIR(ostream& os, bool color, bool simplify) const {

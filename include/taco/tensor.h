@@ -1,10 +1,12 @@
 #ifndef TACO_TENSOR_H
 #define TACO_TENSOR_H
 
+#include <algorithm>    // std::stable_sort
+#include <cassert>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
-#include <cassert>
 
 #include "taco/type.h"
 #include "taco/format.h"
@@ -17,7 +19,11 @@
 #include "taco/storage/typed_vector.h"
 #include "taco/storage/typed_index.h"
 
+#include "taco/index_notation/index_notation_nodes.h"
+#include "taco/index_notation/index_notation_rewriter.h"
+
 #include "taco/util/name_generator.h"
+#include "taco/util/collections.h"
 #include "taco/error.h"
 #include "taco/error/error_messages.h"
 
@@ -234,6 +240,12 @@ public:
   friend std::ostream& operator<<(std::ostream&, const TensorBase&);
 
 private:
+  /// Set the expression to be evaluated when calling compute or assemble.
+  void setTransposeAssignment(Assignment assignment);
+
+  /// Set the expression to be evaluated when calling compute or assemble.
+  Assignment getTransposeAssignment() const;
+
   struct Content;
   std::shared_ptr<Content> content;
 
@@ -242,6 +254,16 @@ private:
   size_t                             coordinateSize;
 };
 
+/// Inherits Access and adds a TensorBase object, so that we can retrieve the
+/// tensors that was used in an expression when we later want to pack arguments.
+struct AccessTensorNode : public AccessNode {
+  AccessTensorNode(TensorBase tensor, const std::vector<IndexVar>& indices)
+      :  AccessNode(tensor.getTensorVar(), indices), tensor(tensor) {}
+  TensorBase tensor;
+  virtual void setAssignment(const Assignment& assignment) {
+    tensor.setAssignment(assignment);
+  }
+};
 
 /// A reference to a tensor. Tensor object copies copies the reference, and
 /// subsequent method calls affect both tensor references. To deeply copy a
@@ -302,7 +324,6 @@ public:
     for (int mode : newModeOrdering) {
       newDimensions.push_back(getDimensions()[mode]);
     }
-
     Tensor<CType> newTensor(name, newDimensions, format);
     for (const std::pair<std::vector<size_t>,CType>& value : *this) {
       std::vector<int> newCoordinate;
@@ -313,6 +334,121 @@ public:
     }
     newTensor.pack();
     return newTensor;
+  }
+
+
+  /// Packs a new equivalent tensor with a new mode ordering.
+  Tensor<CType> changeModeOrdering(std::vector<int> newModeOrdering) const {
+    return changeModeOrdering(util::uniqueName('A'), newModeOrdering);
+  }
+  Tensor<CType> changeModeOrdering(std::string name, std::vector<int> newModeOrdering) const {
+    Tensor<CType> newTensor(
+        name,
+        getDimensions(),
+        Format(getFormat().getModeFormatPacks(), newModeOrdering));
+    for (const std::pair<std::vector<size_t>,CType>& value : *this) {
+      std::vector<int> newCoordinate;
+      for (size_t modeSize : value.first) {
+        newCoordinate.push_back((int) modeSize);
+      }
+      newTensor.insert(newCoordinate, value.second);
+    }
+    newTensor.pack();
+    return newTensor;
+  }
+
+  static std::vector<IndexVar> sortIndices(std::vector<IndexVar> indexVars, std::vector<int> ordering) {
+    std::vector<IndexVar> orderedIndexVars = std::vector<IndexVar>(indexVars.size(), IndexVar());
+    for (size_t i = 0; i < indexVars.size(); i++) {
+      orderedIndexVars[ordering[i]] = indexVars[i];
+    }
+    return orderedIndexVars;
+  }
+
+  static std::vector<int> getModeOrdering(std::vector<IndexVar> indexOrdering, std::vector<IndexVar> indexVars) {
+    std::map<IndexVar,int> indexOrderMap;
+    int indexCount = 0;
+    for (IndexVar var : indexOrdering) {
+      if (util::contains(indexVars, var)) {
+        indexOrderMap.insert({var, indexCount});
+        indexCount++;
+      }
+    }
+
+    std::vector<int> newModeOrdering;
+    for (IndexVar var : indexVars) {
+      newModeOrdering.push_back(indexOrderMap[var]);
+    }
+    return newModeOrdering;
+  }
+
+  void makeTransposeAssignment() {
+    Assignment assignment = getAssignment();
+    taco_uassert(assignment.defined())
+        << error::compile_without_expr;
+
+    // Determines the global ordering of index variables for
+    // the given expression.
+    // orderedIndexVars must be set with the lhs indexVars in
+    // iteration order.
+    struct GetIndexOrdering : public IndexNotationVisitor {
+      using IndexNotationVisitor::visit;
+      std::vector<IndexVar> orderedIndexVars;
+      void visit(const AccessNode* node) {
+        int indexCount = 0;
+        std::vector<IndexVar> indexVars =
+            sortIndices(node->indexVars, node->tensorVar.getFormat().getModeOrdering());
+        for (IndexVar var : indexVars) {
+          if (!util::contains(orderedIndexVars, var)) {
+            orderedIndexVars.insert(orderedIndexVars.begin() + indexCount, var);
+          }
+          indexCount++;
+        }
+      }
+    };
+    
+    // Changes the mode ordering of all tensors in the expression
+    // so that all the mode orderings obey the given targetIndexOrdering.
+    struct Transposer : public IndexNotationRewriter {
+      using IndexNotationRewriter::visit;
+      std::vector<IndexVar> targetIndexOrdering;
+
+      void visit(const AccessNode* node) {
+        taco_iassert(isa<AccessTensorNode>(node)) << "Unknown subexpression";
+        std::vector<int> newModeOrdering = getModeOrdering(targetIndexOrdering, node->indexVars);
+        if (newModeOrdering == node->tensorVar.getFormat().getModeOrdering()) {
+          expr = node;
+          return;
+        }
+        std::cout << "Oh no" << std::endl;
+        Tensor<CType> tensor = Tensor<CType>(to<AccessTensorNode>(node)->tensor);
+        Tensor<CType> transpose = tensor.changeModeOrdering(newModeOrdering);
+        expr = transpose(node->indexVars);
+      }
+    };
+
+    Access    lhs = assignment.getLhs();
+    IndexExpr rhs = assignment.getRhs();
+    std::vector<IndexVar> lhsIndexVars = assignment.getFreeVars();
+
+    std::vector<IndexVar> orderedIndexVars =
+        sortIndices(lhsIndexVars, lhs.getTensorVar().getFormat().getModeOrdering());
+
+    GetIndexOrdering getIndexOrdering;
+    getIndexOrdering.orderedIndexVars = orderedIndexVars;
+    rhs.accept(&getIndexOrdering);
+    orderedIndexVars = getIndexOrdering.orderedIndexVars;
+
+    Transposer transposer;
+    transposer.targetIndexOrdering = orderedIndexVars;
+    rhs = transposer.rewrite(rhs);
+    setAssignment(Assignment(lhs, rhs));
+  }
+
+  void compile(bool assembleWhileCompute=false) {
+    // transpose
+    makeTransposeAssignment();
+    TensorBase::compile(assembleWhileCompute);
   }
 
   template<typename T>
