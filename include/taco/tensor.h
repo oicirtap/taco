@@ -239,6 +239,10 @@ public:
   /// Print a tensor to a stream.
   friend std::ostream& operator<<(std::ostream&, const TensorBase&);
 
+protected:
+  // Turn assignment into a concrete index notation statement.
+  static IndexStmt makeConcrete(Assignment assignment);
+
 private:
   /// Set the expression to be evaluated when calling compute or assemble.
   void setTransposeAssignment(Assignment assignment);
@@ -391,7 +395,7 @@ public:
     // the given expression.
     // orderedIndexVars must be set with the lhs indexVars in
     // iteration order.
-    struct GetIndexOrdering : public IndexNotationVisitor {
+    struct GetIndexOrdering2 : public IndexNotationVisitor {
       using IndexNotationVisitor::visit;
       std::vector<IndexVar> orderedIndexVars;
       void visit(const AccessNode* node) {
@@ -404,6 +408,15 @@ public:
           }
           indexCount++;
         }
+      }
+    };
+
+    struct GetIndexOrdering : public IndexNotationVisitor {
+      using IndexNotationVisitor::visit;
+      std::vector<IndexVar> orderedIndexVars;
+      void visit(const ForallNode* node) {
+        orderedIndexVars.push_back(node->indexVar);
+        node->stmt.accept(this);
       }
     };
     
@@ -427,17 +440,21 @@ public:
       }
     };
 
+    IndexStmt stmt = makeConcrete(assignment);
+    std::cout << stmt << std::endl;
+    GetIndexOrdering getIndexOrdering;
+    stmt.accept(&getIndexOrdering);
+    std::vector<IndexVar> orderedIndexVars = getIndexOrdering.orderedIndexVars;
+
+    std::cout << "vars: ";
+    for (auto v : orderedIndexVars) {
+      std::cout << v << " ";
+    }
+    std::cout << std::endl;
+
     Access    lhs = assignment.getLhs();
     IndexExpr rhs = assignment.getRhs();
     std::vector<IndexVar> lhsIndexVars = assignment.getFreeVars();
-
-    std::vector<IndexVar> orderedIndexVars =
-        sortIndices(lhsIndexVars, lhs.getTensorVar().getFormat().getModeOrdering());
-
-    GetIndexOrdering getIndexOrdering;
-    getIndexOrdering.orderedIndexVars = orderedIndexVars;
-    rhs.accept(&getIndexOrdering);
-    orderedIndexVars = getIndexOrdering.orderedIndexVars;
 
     Transposer transposer;
     transposer.targetIndexOrdering = orderedIndexVars;

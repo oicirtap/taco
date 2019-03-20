@@ -43,7 +43,7 @@ struct expr : public TestWithParam<TestData> {};
 TEST_P(expr, storage) {
   Tensor<double> tensor = GetParam().tensor;
   packOperands(tensor);
-
+  std::cout << tensor.getAssignment() << std::endl;
   tensor.compile();
   tensor.assemble();
   tensor.compute();

@@ -128,7 +128,7 @@ static Format initFormat(Format format) {
 }
 
 // TODO remove this when removing the old dense
-static IndexStmt makeConcrete(Assignment assignment) {
+IndexStmt TensorBase::makeConcrete(Assignment assignment) {
   IndexStmt stmt = makeConcreteNotation(makeReductionNotation(assignment));
   struct Rewriter : IndexNotationRewriter {
     using IndexNotationRewriter::visit;
@@ -136,7 +136,7 @@ static IndexStmt makeConcrete(Assignment assignment) {
     void visit(const AccessNode* op) {
       TensorVar var = op->tensorVar;
       Format format = var.getFormat();
-      std::cout << var << " " << format << std::endl;
+      //std::cout << var << " " << format << std::endl;
       vector<ModeFormatPack> packs;
       for (auto& pack : format.getModeFormatPacks()) {
         vector<ModeFormat> modeFormats;
