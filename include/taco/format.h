@@ -24,7 +24,7 @@ public:
   /// Create a format for a 1-order tensor (a vector).
   Format(const ModeFormat modeFormat);
 
-  Format(const std::initializer_list<ModeFormatPack>& modeFormatPacks);
+  //Format(const std::initializer_list<ModeFormatPack>& modeFormatPacks);
   
   /// Create a tensor format whose modes have the given mode storage formats.
   /// The format of mode i is specified by modeFormats[i]. Mode i is stored in
@@ -55,6 +55,11 @@ public:
 
   /// Gets the types of the coordinate arrays for each level
   const std::vector<std::vector<Datatype>>& getLevelArrayTypes() const;
+  
+  /// Returns true if the format is a blocked format.
+  bool isBlocked() const;
+
+  std::vector<int> getBlockDimensions() const;
 
   /// Gets the type of the position array for level i
   Datatype getCoordinateTypePos(size_t level) const;
@@ -69,6 +74,8 @@ private:
   std::vector<ModeFormatPack> modeFormatPacks;
   std::vector<int> modeOrdering;
   std::vector<std::vector<Datatype>> levelArrayTypes;
+  bool blockFormat = false;
+  std::vector<int> blockDimensions;
 };
 
 bool operator==(const Format&, const Format&);
@@ -107,6 +114,10 @@ public:
   /// properties
   ModeFormat operator()(const std::vector<Property>& properties = {});
 
+  /// Instantiates a variant of the mode format with fixed dimension size.
+  /// dimension specifications required for blocked formats.
+  ModeFormat operator()(int dimSize) const;
+
   /// Returns string identifying mode format. The format name should not reflect
   /// property configurations; mode formats with differently configured properties
   /// should return the same name.
@@ -133,8 +144,13 @@ public:
   /// type can be used to indicate a mode whose format is not (yet) known.
   bool defined() const;
 
+  bool hasDimensionSize();
+  int getDimensionSize();
+
 private:
   std::shared_ptr<const ModeFormatImpl> impl;
+  mutable bool dimensionSizeSet = false;
+  mutable int dimensionSize = 0;
 
   friend class ModePack;
   friend class Iterator;

@@ -22,6 +22,7 @@ Format::Format() {
 Format::Format(const ModeFormat modeFormat) : modeFormatPacks({modeFormat}),
     modeOrdering({0}) {}
 
+/*
 Format::Format(const std::initializer_list<ModeFormatPack>& modeFormatPacks)
     : modeFormatPacks(modeFormatPacks) {
   taco_uassert(getOrder() <= INT_MAX) << "Supports only INT_MAX modes";
@@ -30,12 +31,23 @@ Format::Format(const std::initializer_list<ModeFormatPack>& modeFormatPacks)
   for (int i = 0; i < static_cast<int>(getOrder()); ++i) {
     modeOrdering[i] = i;
   }
-}
+}*/
 
 Format::Format(const std::vector<ModeFormatPack>& modeFormatPacks) :
     modeFormatPacks(modeFormatPacks) {
   taco_uassert(getOrder() <= INT_MAX) << "Supports only INT_MAX modes";
   
+  // block format
+  if (modeFormatPacks.size() == 2) {
+    taco_uassert(modeFormatPacks[0].getModeFormats().size() == modeFormatPacks[1].getModeFormats().size())
+                 << "tensor block must have same number of dimmensions as tensor.";
+    blockFormat = true;
+    for (ModeFormat modeFormat : modeFormatPacks[1].getModeFormats()) {
+      taco_uassert(modeFormat.hasDimensionSize()) << "tensor block dimensions must be fully specified.";
+      blockDimensions.push_back(modeFormat.getDimensionSize());
+    }
+  }
+
   modeOrdering.resize(getOrder());
   for (int i = 0; i < static_cast<int>(getOrder()); ++i) {
     modeOrdering[i] = i;
@@ -74,6 +86,14 @@ const std::vector<int>& Format::getModeOrdering() const {
 
 const std::vector<std::vector<Datatype>>& Format::getLevelArrayTypes() const {
   return this->levelArrayTypes;
+}
+
+bool Format::isBlocked() const {
+  return blockFormat;
+}
+
+std::vector<int> Format::getBlockDimensions() const {
+  return blockDimensions;
 }
 
 Datatype Format::getCoordinateTypePos(size_t level) const {
@@ -140,6 +160,21 @@ ModeFormat::ModeFormat(const std::shared_ptr<ModeFormatImpl> impl) : impl(impl) 
 
 ModeFormat ModeFormat::operator()(const std::vector<Property>& properties) {
   return defined() ? impl->copy(properties) : ModeFormat();
+}
+
+ModeFormat ModeFormat::operator()(int dimSize) const {
+  taco_uassert(!dimensionSizeSet) << "Cannot set ModeFormat dimension size more than once.";
+  dimensionSizeSet = true;
+  dimensionSize = dimSize;
+  return *this;
+}
+
+bool ModeFormat::hasDimensionSize() {
+  return dimensionSizeSet;
+}
+
+int ModeFormat::getDimensionSize() {
+  return dimensionSize;
 }
 
 std::string ModeFormat::getName() const {

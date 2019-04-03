@@ -112,7 +112,20 @@ public:
   /// tensor order.
   template <typename T>
   void insert(const std::vector<int>& coordinate, T value) {
-    taco_uassert(coordinate.size() == (size_t)getOrder()) <<
+    std::vector<int> tempCoordinate = coordinate;
+    if (getFormat().isBlocked() && coordinate.size() == (size_t)getOrder() / 2) {
+      std::vector<int> extendedCoordinate;
+      for (size_t mode = 0; mode < getDimensions().size() / 2; mode++) {
+        int outerCoordinate = coordinate[mode] / getFormat().getBlockDimensions()[mode];
+        extendedCoordinate.push_back(outerCoordinate);
+      }
+      for (size_t mode = 0; mode < getDimensions().size() / 2; mode++) {
+        int innerCoordinate = coordinate[mode] % getFormat().getBlockDimensions()[mode];
+        extendedCoordinate.push_back(innerCoordinate);
+      }
+      tempCoordinate = extendedCoordinate;
+    }
+    taco_uassert(tempCoordinate.size() == (size_t)getOrder()) <<
     "Wrong number of indices";
     taco_uassert(getComponentType() == type<T>()) <<
       "Cannot insert a value of type '" << type<T>() << "' " <<
@@ -121,7 +134,7 @@ public:
       coordinateBuffer->resize(coordinateBuffer->size() + coordinateSize);
     }
     int* coordLoc = (int*)&coordinateBuffer->data()[coordinateBufferUsed];
-    for (int idx : coordinate) {
+    for (int idx : tempCoordinate) {
       *coordLoc = idx;
       coordLoc++;
     }

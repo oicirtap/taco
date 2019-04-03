@@ -157,11 +157,31 @@ static IndexStmt makeConcrete(Assignment assignment) {
 }
 
 TensorBase::TensorBase(string name, Datatype ctype, vector<int> dimensions,
-                       Format format)
-    : content(new Content(name, ctype, dimensions, initFormat(format))) {
-  taco_uassert((size_t)format.getOrder() == dimensions.size()) <<
-      "The number of format mode types (" << format.getOrder() << ") " <<
-      "must match the tensor order (" << dimensions.size() << ").";
+                       Format format) {
+  if (format.isBlocked()) {
+    vector<int> extendedDimensions;
+    taco_uassert((size_t)format.getOrder() / 2 == dimensions.size()) <<
+        "The number of format modes (" << format.getOrder() << ") " <<
+        "must match the tensor order (" << dimensions.size() << ").";
+    for (size_t mode = 0; mode < dimensions.size(); mode++) {
+      taco_uassert(dimensions[mode] % format.getBlockDimensions()[mode] == 0) <<
+          "The size of dimension " << mode << " (" << dimensions[mode] << ") "
+          "must be divisible by the dimension's block size (" <<
+          format.getBlockDimensions()[mode] << ").";
+      int outerDimensionSize = dimensions[mode] / format.getBlockDimensions()[mode];
+      extendedDimensions.push_back(outerDimensionSize);
+    }
+    for (int blockDimensionSize : format.getBlockDimensions()) {
+      extendedDimensions.push_back(blockDimensionSize);
+    }
+    dimensions = extendedDimensions;
+  } else {
+    taco_uassert((size_t)format.getOrder() == dimensions.size()) <<
+        "The number of format mode types (" << format.getOrder() << ") " <<
+        "must match the tensor order (" << dimensions.size() << ").";
+  }
+
+  content = std::make_shared<Content>(name, ctype, dimensions, initFormat(format));
 
   content->allocSize = 1 << 20;
 
@@ -383,19 +403,45 @@ struct AccessTensorNode : public AccessNode {
 };
 
 const Access TensorBase::operator()(const std::vector<IndexVar>& indices) const {
-  taco_uassert(indices.size() == (size_t)getOrder())
+  std::vector<IndexVar> tempIndices = indices;
+  if (getFormat().isBlocked() && indices.size() == (size_t)getOrder() / 2) {
+    std::vector<IndexVar> extendedIndices;
+    for (IndexVar index : indices) {
+      extendedIndices.push_back(index);
+    }
+    for (IndexVar index : indices) {
+      std::string indexName = index.getName() + "_inner";
+      IndexVar innerIndex = IndexVar(indexName);
+      extendedIndices.push_back(innerIndex);
+    }
+    tempIndices = extendedIndices;
+  }
+  taco_uassert(tempIndices.size() == (size_t)getOrder())
       << "A tensor of order " << getOrder() << " must be indexed with "
       << getOrder() << " variables, but is indexed with:  "
-      << util::join(indices);
-  return Access(new AccessTensorNode(*this, indices));
+      << util::join(tempIndices);
+  return Access(new AccessTensorNode(*this, tempIndices));
 }
 
 Access TensorBase::operator()(const std::vector<IndexVar>& indices) {
-  taco_uassert(indices.size() == (size_t)getOrder())
+  std::vector<IndexVar> tempIndices = indices;
+  if (getFormat().isBlocked() && indices.size() == (size_t)getOrder() / 2) {
+    std::vector<IndexVar> extendedIndices;
+    for (IndexVar index : indices) {
+      extendedIndices.push_back(index);
+    }
+    for (IndexVar index : indices) {
+      std::string indexName = index.getName() + "_inner";
+      IndexVar innerIndex = IndexVar(indexName);
+      extendedIndices.push_back(innerIndex);
+    }
+    tempIndices = extendedIndices;
+  }
+  taco_uassert(tempIndices.size() == (size_t)getOrder())
       << "A tensor of order " << getOrder() << " must be indexed with "
       << getOrder() << " variables, but is indexed with:  "
-      << util::join(indices);
-  return Access(new AccessTensorNode(*this, indices));
+      << util::join(tempIndices);
+  return Access(new AccessTensorNode(*this, tempIndices));
 }
 
 void TensorBase::compile(bool assembleWhileCompute) {
