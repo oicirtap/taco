@@ -60,6 +60,7 @@ struct TensorBase::Content {
   TensorStorage      storage;
   TensorVar          tensorVar;
   Assignment         assignment;
+
   Assignment         transposeAssignment;
   bool               transposed;
 
@@ -136,7 +137,6 @@ IndexStmt TensorBase::makeConcrete(Assignment assignment) {
     void visit(const AccessNode* op) {
       TensorVar var = op->tensorVar;
       Format format = var.getFormat();
-      //std::cout << var << " " << format << std::endl;
       vector<ModeFormatPack> packs;
       for (auto& pack : format.getModeFormatPacks()) {
         vector<ModeFormat> modeFormats;
@@ -180,6 +180,8 @@ TensorBase::TensorBase(string name, Datatype ctype, vector<int> dimensions,
 
   content->assembleWhileCompute = false;
   content->module = make_shared<Module>();
+
+  content->transposed = false;
 
   this->coordinateBuffer = shared_ptr<vector<char>>(new vector<char>);
   this->coordinateBufferUsed = 0;
@@ -239,6 +241,17 @@ void TensorBase::setAllocSize(size_t allocSize) {
 
 size_t TensorBase::getAllocSize() const {
   return content->allocSize;
+}
+
+bool TensorBase::isAssignmentTransposed() {
+  return content->transposed;
+}
+Assignment TensorBase::getTransposeAssignment() {
+  return content->transposeAssignment;
+}
+void TensorBase::setTransposeAssignment(Assignment assignment) {
+  content->transposeAssignment = makeReductionNotation(assignment);
+  content->transposed = true;
 }
 
 static size_t numIntegersToCompare = 0;
@@ -390,7 +403,12 @@ Access TensorBase::operator()(const std::vector<IndexVar>& indices) {
 }
 
 void TensorBase::compile(bool assembleWhileCompute) {
-  Assignment assignment = getAssignment();
+  Assignment assignment;
+  if (isAssignmentTransposed()) {
+    assignment = getTransposeAssignment();
+  } else {
+    assignment = getAssignment();
+  }
   taco_uassert(assignment.defined())
       << error::compile_without_expr;
 
@@ -398,7 +416,6 @@ void TensorBase::compile(bool assembleWhileCompute) {
 
   if (std::getenv("NEW_LOWER") && 
       std::string(std::getenv("NEW_LOWER")) == "1") {
-    //std::cout << assignment << std::endl;
     IndexStmt stmt = makeConcrete(assignment);
     
     content->assembleFunc = lower(stmt, "assemble", true, false);
@@ -473,14 +490,13 @@ static inline vector<TensorBase> getTensors(const IndexExpr& expr) {
 }
 
 static inline
-vector<void*> packArguments(const TensorBase& tensor) {
+vector<void*> packArguments(const TensorBase& tensor, const Assignment& assignment) {
   vector<void*> arguments;
-
   // Pack the result tensor
   arguments.push_back(tensor.getStorage());
 
   // Pack operand tensors
-  auto operands = getTensors(tensor.getAssignment().getRhs());
+  auto operands = getTensors(assignment.getRhs());
   for (auto& operand : operands) {
     arguments.push_back(operand.getStorage());
   }
@@ -491,26 +507,44 @@ vector<void*> packArguments(const TensorBase& tensor) {
 void TensorBase::assemble() {
   taco_uassert(this->content->assembleFunc.defined())
       << error::assemble_without_compile;
+  Assignment assignment;
+  TensorBase tensor;
+  if (isAssignmentTransposed()) {
+    assignment = getTransposeAssignment();
+    tensor = to<AccessTensorNode>(assignment.getLhs().ptr)->tensor;
+  } else {
+    assignment = getAssignment();
+    tensor = *this;
+  }
 
-  auto arguments = packArguments(*this);
+  auto arguments = packArguments(tensor, assignment);
   content->module->callFuncPacked("assemble", arguments.data());
 
   if (!content->assembleWhileCompute) {
     taco_tensor_t* tensorData = ((taco_tensor_t*)arguments[0]);
-    content->valuesSize = unpackTensorData(*tensorData, *this);
+    content->valuesSize = unpackTensorData(*tensorData, tensor);
   }
 }
 
 void TensorBase::compute() {
   taco_uassert(this->content->computeFunc.defined())
       << error::compute_without_compile;
+  Assignment assignment;
+  TensorBase tensor;
+  if (isAssignmentTransposed()) {
+    assignment = getTransposeAssignment();
+    tensor = to<AccessTensorNode>(assignment.getLhs().ptr)->tensor;
+  } else {
+    assignment = getAssignment();
+    tensor = *this;
+  }
 
-  auto arguments = packArguments(*this);
+  auto arguments = packArguments(tensor, assignment);
   this->content->module->callFuncPacked("compute", arguments.data());
 
   if (content->assembleWhileCompute) {
     taco_tensor_t* tensorData = ((taco_tensor_t*)arguments[0]);
-    content->valuesSize = unpackTensorData(*tensorData, *this);
+    content->valuesSize = unpackTensorData(*tensorData, tensor);
   }
 }
 
@@ -537,15 +571,6 @@ void TensorBase::setAssignment(Assignment assignment) {
 
 Assignment TensorBase::getAssignment() const {
   return content->assignment;
-}
-
-void TensorBase::setTransposeAssignment(Assignment assignment) {
-  content->transposeAssignment = makeReductionNotation(assignment);
-  content->transposed = true;
-}
-
-Assignment TensorBase::getTransposeAssignment() const {
-  return content->transposeAssignment;
 }
 
 void TensorBase::printComputeIR(ostream& os, bool color, bool simplify) const {
@@ -648,7 +673,6 @@ bool equalsTyped(const TensorBase& a, const TensorBase& b) {
         continue;
       }
 
-      std::cout << "heyo" << std::endl;
       return false;
     }
     if (!scalarEquals(aval, bval)) {

@@ -8,7 +8,6 @@ const IndexVar i("i"), j("j"), k("k");
 
 TEST(expr, reduction0) {
   Tensor<double> a("a");
-
   Tensor<double> b = d5a("b", Dense);
   Tensor<double> c = d5b("c", Dense);
   b.pack();

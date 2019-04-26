@@ -243,13 +243,11 @@ protected:
   // Turn assignment into a concrete index notation statement.
   static IndexStmt makeConcrete(Assignment assignment);
 
-private:
-  /// Set the expression to be evaluated when calling compute or assemble.
+  bool isAssignmentTransposed();
+  Assignment getTransposeAssignment();
   void setTransposeAssignment(Assignment assignment);
 
-  /// Set the expression to be evaluated when calling compute or assemble.
-  Assignment getTransposeAssignment() const;
-
+private:
   struct Content;
   std::shared_ptr<Content> content;
 
@@ -369,7 +367,10 @@ public:
     return orderedIndexVars;
   }
 
-  static std::vector<int> getModeOrdering(std::vector<IndexVar> indexOrdering, std::vector<IndexVar> indexVars) {
+  /// Generates the appropriate tensor ModeOrdering such that indexVars
+  /// traverse the tensor in the specified indexOrdering
+  static std::vector<int> getModeOrdering(std::vector<IndexVar> indexOrdering,
+      std::vector<IndexVar> indexVars) {
     std::map<IndexVar,int> indexOrderMap;
     int indexCount = 0;
     for (IndexVar var : indexOrdering) {
@@ -391,26 +392,8 @@ public:
     taco_uassert(assignment.defined())
         << error::compile_without_expr;
 
-    // Determines the global ordering of index variables for
-    // the given expression.
-    // orderedIndexVars must be set with the lhs indexVars in
-    // iteration order.
-    struct GetIndexOrdering2 : public IndexNotationVisitor {
-      using IndexNotationVisitor::visit;
-      std::vector<IndexVar> orderedIndexVars;
-      void visit(const AccessNode* node) {
-        int indexCount = 0;
-        std::vector<IndexVar> indexVars =
-            sortIndices(node->indexVars, node->tensorVar.getFormat().getModeOrdering());
-        for (IndexVar var : indexVars) {
-          if (!util::contains(orderedIndexVars, var)) {
-            orderedIndexVars.insert(orderedIndexVars.begin() + indexCount, var);
-          }
-          indexCount++;
-        }
-      }
-    };
-
+    // Determines the global ordering of index variables for the given
+    // expression based on the concrete index notation ordering.
     struct GetIndexOrdering : public IndexNotationVisitor {
       using IndexNotationVisitor::visit;
       std::vector<IndexVar> orderedIndexVars;
@@ -425,15 +408,17 @@ public:
     struct Transposer : public IndexNotationRewriter {
       using IndexNotationRewriter::visit;
       std::vector<IndexVar> targetIndexOrdering;
+      bool transposed = false;
 
       void visit(const AccessNode* node) {
         taco_iassert(isa<AccessTensorNode>(node)) << "Unknown subexpression";
-        std::vector<int> newModeOrdering = getModeOrdering(targetIndexOrdering, node->indexVars);
+        std::vector<int> newModeOrdering = getModeOrdering(targetIndexOrdering,
+                                                           node->indexVars);
         if (newModeOrdering == node->tensorVar.getFormat().getModeOrdering()) {
           expr = node;
           return;
         }
-        std::cout << "Oh no" << std::endl;
+        transposed = true;
         Tensor<CType> tensor = Tensor<CType>(to<AccessTensorNode>(node)->tensor);
         Tensor<CType> transpose = tensor.changeModeOrdering(newModeOrdering);
         expr = transpose(node->indexVars);
@@ -441,31 +426,42 @@ public:
     };
 
     IndexStmt stmt = makeConcrete(assignment);
-    std::cout << stmt << std::endl;
     GetIndexOrdering getIndexOrdering;
     stmt.accept(&getIndexOrdering);
     std::vector<IndexVar> orderedIndexVars = getIndexOrdering.orderedIndexVars;
 
-    std::cout << "vars: ";
-    for (auto v : orderedIndexVars) {
-      std::cout << v << " ";
-    }
-    std::cout << std::endl;
-
-    Access    lhs = assignment.getLhs();
-    IndexExpr rhs = assignment.getRhs();
-    std::vector<IndexVar> lhsIndexVars = assignment.getFreeVars();
-
     Transposer transposer;
     transposer.targetIndexOrdering = orderedIndexVars;
-    rhs = transposer.rewrite(rhs);
-    setAssignment(Assignment(lhs, rhs));
+
+    std::vector<int> lhsModeOrdering =
+        getModeOrdering(orderedIndexVars, assignment.getLhs().getIndexVars());
+
+    IndexExpr rhs = transposer.rewrite(assignment.getRhs());
+
+    if (transposer.transposed || lhsModeOrdering != getFormat().getModeOrdering()) {
+      Tensor<CType> lhs(
+          getDimensions(),
+          Format(getFormat().getModeFormatPacks(), lhsModeOrdering));
+      setTransposeAssignment(Assignment(lhs(assignment.getLhs().getIndexVars()), rhs));
+    }
   }
 
   void compile(bool assembleWhileCompute=false) {
     // transpose
     makeTransposeAssignment();
     TensorBase::compile(assembleWhileCompute);
+  }
+
+  void compute() {
+    TensorBase::compute();
+    if (isAssignmentTransposed()) {
+      Assignment assignment = getTransposeAssignment();
+      Tensor<CType> tensor = Tensor<CType>(to<AccessTensorNode>(assignment.getLhs().ptr)->tensor);
+      if (tensor.getFormat().getModeOrdering() != getFormat().getModeOrdering()) {
+        tensor = tensor.changeModeOrdering(getFormat().getModeOrdering());
+      }
+      setStorage(tensor.getStorage());
+    }
   }
 
   template<typename T>
